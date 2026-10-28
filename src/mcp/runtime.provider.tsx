@@ -41,6 +41,7 @@ export function McpRuntimeProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
   const lifecycle = useRef<Promise<void>>(Promise.resolve());
+  const manifest = useMemo(() => buildMcpManifest(accessLevel), [accessLevel]);
 
   const enqueueLifecycle = useCallback(
     <T,>(operation: () => Promise<T>): Promise<T> => {
@@ -167,6 +168,36 @@ export function McpRuntimeProvider({ children }: { children: ReactNode }) {
     }, 5_000);
     return () => window.clearInterval(timer);
   }, [phase, root]);
+
+  useEffect(() => {
+    if (
+      !root ||
+      phase !== "ready" ||
+      (status.toolCount === manifest.tools.length &&
+        status.resourceCount === manifest.resources.length)
+    ) {
+      return;
+    }
+    void enqueueLifecycle(() =>
+      invoke<McpServerStatus>("mcp_configure", { request: { manifest } })
+    )
+      .then((next) => {
+        setStatus(next);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+        setPhase("degraded");
+        log.error("MCP manifest synchronization failed", err);
+      });
+  }, [
+    enqueueLifecycle,
+    manifest,
+    phase,
+    root,
+    status.resourceCount,
+    status.toolCount,
+  ]);
 
   useEffect(() => {
     if (!root) return;

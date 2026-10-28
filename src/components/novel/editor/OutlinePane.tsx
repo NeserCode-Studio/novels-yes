@@ -55,6 +55,14 @@ import {
 import { useI18n } from "@/composables";
 import { useLibrary } from "@/contexts/library";
 import { useOutline } from "@/contexts/outline";
+import { useThemeContext } from "@/contexts/theme";
+import { useWorkspace } from "@/contexts/workspace";
+import {
+  loadEmotionTypeConfig,
+  loadWorkTimeline,
+  type EmotionTypeConfig,
+  type WorkTimeline,
+} from "@/services/timeline";
 import type { OutlineNode } from "@/shared/schema";
 import { createLogger } from "@/lib/logger";
 import { computeIndexByPosition } from "@/lib/outline-move";
@@ -65,6 +73,12 @@ import { useJumpHighlight } from "@/hooks/useJumpHighlight";
 
 const log = createLogger("OutlinePane");
 const VOLUME_COLLAPSE_KEY = "novels-yes:editor:volume-collapsed";
+
+type ChapterEmotionStatus = {
+  count: number;
+  color: string;
+  label: string;
+};
 
 export interface OutlinePaneProps {
   /** 打开章节；普通结构树导航必须落到章首。 */
@@ -95,6 +109,8 @@ export interface OutlinePaneProps {
   ) => Promise<void>;
   /** 删除整卷（连同其下所有章进回收站）；父级负责确认与落盘。 */
   onDeleteVolume: (volumeId: string) => void;
+  /** 时间线在编辑页内变更时递增，用于刷新章节状态指示器。 */
+  timelineVersion?: number;
 }
 
 /**
@@ -205,6 +221,7 @@ function SortableChapter({
   metaLabel,
   wordsLabel,
   statusLabel,
+  emotionStatus,
 }: {
   node: OutlineNode;
   index: number;
@@ -228,6 +245,7 @@ function SortableChapter({
   metaLabel: string;
   wordsLabel: string;
   statusLabel: string;
+  emotionStatus: ChapterEmotionStatus | null;
 }) {
   const {
     attributes,
@@ -281,7 +299,27 @@ function SortableChapter({
           <span className="text-muted-foreground/50 shrink-0 text-[10px] tabular-nums">
             {String(index + 1).padStart(2, "0")}
           </span>
-          <span className="truncate text-sm font-medium">{node.title}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            {node.title}
+          </span>
+          {emotionStatus ? (
+            <span
+              className="border-border/70 bg-background/80 inline-flex h-3.5 min-w-3.5 shrink-0 items-center justify-center gap-0.5 rounded-full border px-1"
+              role="img"
+              aria-label={emotionStatus.label}
+              title={emotionStatus.label}
+            >
+              <span
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: emotionStatus.color }}
+              />
+              {emotionStatus.count > 1 ? (
+                <span className="text-muted-foreground text-[8px] leading-none font-medium tabular-nums">
+                  {emotionStatus.count > 9 ? "9+" : emotionStatus.count}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
           {/* 状态点：非草稿才标，否则整棵树都是点、看不出差别。 */}
           {node.status !== "draft" ? (
             <span
@@ -292,7 +330,7 @@ function SortableChapter({
               title={statusLabel}
             />
           ) : null}
-          <span className="text-muted-foreground/60 ml-auto shrink-0 text-[10px] tabular-nums">
+          <span className="text-muted-foreground/60 shrink-0 text-[10px] tabular-nums">
             {wordsLabel}
           </span>
         </div>
@@ -609,8 +647,11 @@ export default function OutlinePane({
   onMoveNode,
   onUpdateNode,
   onDeleteVolume,
+  timelineVersion = 0,
 }: OutlinePaneProps) {
   const { t } = useI18n();
+  const { theme } = useThemeContext();
+  const { root } = useWorkspace();
   /*
    * 高亮读 readingChapterId 而不是 currentChapterId。
    *
@@ -625,7 +666,7 @@ export default function OutlinePane({
     currentChapterId,
     readingChapterId,
   } = useOutline();
-  const { currentWorkId } = useLibrary();
+  const { currentWorkId, dataVersion } = useLibrary();
 
   /** 新建卷对话框。 */
   const [volumeDialog, setVolumeDialog] = useState(false);
@@ -656,6 +697,11 @@ export default function OutlinePane({
   >(undefined);
   /** 章节详情对话框的目标节点。 */
   const [metaTarget, setMetaTarget] = useState<OutlineNode | null>(null);
+  const [emotionData, setEmotionData] = useState<{
+    workId: string;
+    timeline: WorkTimeline;
+    config: EmotionTypeConfig;
+  } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   /** 相对时间的基准：每分钟刷新一次即可，太频繁只会白白重渲染。 */
@@ -665,6 +711,32 @@ export default function OutlinePane({
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!root || !currentWorkId) {
+      setEmotionData(null);
+      return;
+    }
+
+    let cancelled = false;
+    Promise.all([
+      loadWorkTimeline(root, currentWorkId),
+      loadEmotionTypeConfig(root),
+    ])
+      .then(([timeline, config]) => {
+        if (cancelled) return;
+        setEmotionData({ workId: currentWorkId, timeline, config });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          log.warn("chapter emotion indicators failed to load", error);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkId, dataVersion, root, timelineVersion]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: DRAG_ACTIVATION })
@@ -687,6 +759,48 @@ export default function OutlinePane({
     () => new Map([...chapters, ...volumes].map((n) => [n.id, n])),
     [chapters, volumes]
   );
+  const emotionIndicators = useMemo(() => {
+    const indicators = new Map<string, ChapterEmotionStatus>();
+    if (!emotionData || emotionData.workId !== currentWorkId) {
+      return indicators;
+    }
+
+    const typeById = new Map(
+      emotionData.config.types.map((type) => [type.id, type] as const)
+    );
+    const pointsByChapter = new Map<string, WorkTimeline["emotionPoints"]>();
+    for (const point of emotionData.timeline.emotionPoints) {
+      const points = pointsByChapter.get(point.chapterId);
+      if (points) points.push(point);
+      else pointsByChapter.set(point.chapterId, [point]);
+    }
+
+    for (const [chapterId, points] of pointsByChapter) {
+      const typeIds = [...new Set(points.map((point) => point.typeId))].sort(
+        (left, right) =>
+          (typeById.get(left)?.order ?? Number.MAX_SAFE_INTEGER) -
+          (typeById.get(right)?.order ?? Number.MAX_SAFE_INTEGER)
+      );
+      const typeNames = typeIds.map(
+        (typeId) =>
+          typeById.get(typeId)?.name ?? t("Codex.timeline.unknownType")
+      );
+      const countLabel = t("Editor.node.emotionPointStatus").replace(
+        "{count}",
+        String(points.length)
+      );
+      indicators.set(chapterId, {
+        count: points.length,
+        color:
+          typeIds
+            .map((typeId) => typeById.get(typeId)?.color[theme])
+            .find(Boolean) ?? "var(--editor-selection-border)",
+        label: [countLabel, typeNames.join("、")].filter(Boolean).join(" · "),
+      });
+    }
+
+    return indicators;
+  }, [currentWorkId, emotionData, t, theme]);
   /** 当前阅读章；卷收起时用它的标题组成跳转 HoverCard。 */
   const selectedChapter = useMemo(() => {
     if (!readingChapterId) return null;
@@ -1010,6 +1124,7 @@ export default function OutlinePane({
               editMetaLabel={t("Editor.node.editMeta")}
               dragLabel={t("Editor.node.dragHint")}
               statusLabel={t(`Editor.node.status.${node.status}`)}
+              emotionStatus={emotionIndicators.get(node.id) ?? null}
               wordsLabel={
                 chapterMetas[node.id]
                   ? `${chapterMetas[node.id].words} ${t("Editor.chapter.words")}`

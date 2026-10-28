@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -36,11 +36,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -72,6 +67,7 @@ function SearchableChoice({
   onChange: (value: string) => void;
 }) {
   const { t } = useI18n();
+  const listId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const selected = choices.find((choice) => choice.value === value);
@@ -88,87 +84,99 @@ function SearchableChoice({
   }, [choices, query]);
   const visible = filtered.slice(0, 120);
 
+  function changeOpen(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) setQuery("");
+  }
+
   return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (nextOpen) setQuery("");
-      }}
-    >
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="border-input bg-background focus-visible:ring-ring flex h-9 w-full min-w-0 items-center gap-2 rounded-md border px-3 text-left text-sm outline-none focus-visible:ring-2"
-        >
-          <span
-            className={[
-              "min-w-0 flex-1 truncate",
-              selected ? "" : "text-muted-foreground",
-            ].join(" ")}
-          >
-            {selected?.label ?? placeholder}
-          </span>
-          <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-[min(24rem,calc(100vw-3rem))] p-0"
+    <div className="min-w-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        className="border-input bg-background focus-visible:ring-ring flex h-9 w-full min-w-0 items-center gap-2 rounded-md border px-3 text-left text-sm outline-none focus-visible:ring-2"
+        onClick={() => changeOpen(!open)}
       >
-        <div className="relative border-b p-2">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 size-3.5 -translate-y-1/2" />
-          <Input
-            autoFocus
-            value={query}
-            className="h-8 pl-8 text-xs"
-            placeholder={searchPlaceholder}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-        <div className="max-h-64 overflow-y-auto p-1" role="listbox">
-          {visible.length ? (
-            visible.map((choice) => (
-              <button
-                key={choice.value || "__empty"}
-                type="button"
-                role="option"
-                aria-selected={choice.value === value}
-                className={[
-                  "hover:bg-accent focus:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs outline-none",
-                  choice.value === value ? "bg-accent/55" : "",
-                ].join(" ")}
-                onClick={() => {
-                  onChange(choice.value);
-                  setOpen(false);
-                }}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{choice.label}</span>
-                  {choice.detail ? (
-                    <span className="text-muted-foreground mt-0.5 block truncate text-[10px]">
-                      {choice.detail}
-                    </span>
+        <span
+          className={[
+            "min-w-0 flex-1 truncate",
+            selected ? "" : "text-muted-foreground",
+          ].join(" ")}
+        >
+          {selected?.label ?? placeholder}
+        </span>
+        <ChevronDown
+          className={[
+            "text-muted-foreground size-3.5 shrink-0 transition-transform",
+            open ? "rotate-180" : "",
+          ].join(" ")}
+        />
+      </button>
+
+      {open ? (
+        <div className="bg-popover mt-1 overflow-hidden rounded-md border shadow-sm">
+          <div className="relative border-b p-2">
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 size-3.5 -translate-y-1/2" />
+            <Input
+              autoFocus
+              value={query}
+              className="h-8 pl-8 text-xs"
+              placeholder={searchPlaceholder}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") changeOpen(false);
+              }}
+            />
+          </div>
+          <div
+            id={listId}
+            className="scrollbar-app max-h-56 [touch-action:pan-y] overflow-y-auto overscroll-contain p-1"
+            role="listbox"
+          >
+            {visible.length ? (
+              visible.map((choice) => (
+                <button
+                  key={choice.value || "__empty"}
+                  type="button"
+                  role="option"
+                  aria-selected={choice.value === value}
+                  className={[
+                    "hover:bg-accent focus:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs outline-none",
+                    choice.value === value ? "bg-accent/55" : "",
+                  ].join(" ")}
+                  onClick={() => {
+                    onChange(choice.value);
+                    changeOpen(false);
+                  }}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{choice.label}</span>
+                    {choice.detail ? (
+                      <span className="text-muted-foreground mt-0.5 block truncate text-[10px]">
+                        {choice.detail}
+                      </span>
+                    ) : null}
+                  </span>
+                  {choice.value === value ? (
+                    <Check className="size-3.5 shrink-0" />
                   ) : null}
-                </span>
-                {choice.value === value ? (
-                  <Check className="size-3.5 shrink-0" />
-                ) : null}
-              </button>
-            ))
-          ) : (
-            <p className="text-muted-foreground px-2 py-4 text-center text-xs">
-              {emptyLabel}
-            </p>
-          )}
-          {filtered.length > visible.length ? (
-            <p className="text-muted-foreground px-2 py-1 text-center text-[10px]">
-              {t("Codex.timeline.refineSearch")}
-            </p>
-          ) : null}
+                </button>
+              ))
+            ) : (
+              <p className="text-muted-foreground px-2 py-4 text-center text-xs">
+                {emptyLabel}
+              </p>
+            )}
+            {filtered.length > visible.length ? (
+              <p className="text-muted-foreground px-2 py-1 text-center text-[10px]">
+                {t("Codex.timeline.refineSearch")}
+              </p>
+            ) : null}
+          </div>
         </div>
-      </PopoverContent>
-    </Popover>
+      ) : null}
+    </div>
   );
 }
 
@@ -183,7 +191,7 @@ interface EmotionPointDialogProps {
   initialEventId?: string | null;
   onSave: (point: EmotionPoint) => Promise<boolean>;
   onDelete: (pointId: string) => Promise<boolean>;
-  onManageTypes: () => void;
+  onManageTypes?: () => void;
 }
 
 export function EmotionPointDialog({
@@ -345,7 +353,7 @@ export function EmotionPointDialog({
 
             <div className="scrollbar-app min-h-0 flex-1 overflow-y-auto px-5 py-4">
               <div className="flex flex-col gap-3">
-                <label className="flex min-w-0 flex-col gap-1.5">
+                <div className="flex min-w-0 flex-col gap-1.5">
                   <span className="text-xs font-medium">
                     {t("Codex.timeline.chapter")}
                     <span className="text-destructive ml-1">*</span>
@@ -363,7 +371,7 @@ export function EmotionPointDialog({
                       {t("Codex.timeline.chapterRequired")}
                     </span>
                   ) : null}
-                </label>
+                </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="flex min-w-0 flex-col gap-1.5">
@@ -433,7 +441,7 @@ export function EmotionPointDialog({
                   </div>
                 </div>
 
-                <label className="flex min-w-0 flex-col gap-1.5">
+                <div className="flex min-w-0 flex-col gap-1.5">
                   <span className="text-xs font-medium">
                     {t("Codex.timeline.event")}
                   </span>
@@ -445,7 +453,7 @@ export function EmotionPointDialog({
                     emptyLabel={t("Codex.timeline.noEventMatch")}
                     onChange={setEventId}
                   />
-                </label>
+                </div>
 
                 <label className="flex min-w-0 flex-col gap-1.5">
                   <span className="text-xs font-medium">
@@ -472,17 +480,19 @@ export function EmotionPointDialog({
                   <span className="text-muted-foreground">
                     {selectedType?.name ?? t("Codex.timeline.noTypes")}
                   </span>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground ml-auto flex items-center gap-1"
-                    onClick={() => {
-                      onOpenChange(false);
-                      onManageTypes();
-                    }}
-                  >
-                    <Settings2 className="size-3" />
-                    {t("Codex.timeline.manageTypes")}
-                  </button>
+                  {onManageTypes ? (
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground ml-auto flex items-center gap-1"
+                      onClick={() => {
+                        onOpenChange(false);
+                        onManageTypes();
+                      }}
+                    >
+                      <Settings2 className="size-3" />
+                      {t("Codex.timeline.manageTypes")}
+                    </button>
+                  ) : null}
                 </div>
 
                 {failed ? (

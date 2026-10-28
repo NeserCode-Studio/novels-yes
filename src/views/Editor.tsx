@@ -70,6 +70,7 @@ import ImportDialog, {
 } from "@/components/novel/ImportDialog";
 import NewChapterDialog from "@/components/novel/editor/NewChapterDialog";
 import OutlinePane from "@/components/novel/editor/OutlinePane";
+import { ChapterEmotionSection } from "@/components/novel/editor/ChapterEmotionSection";
 import SubtreePreview from "@/components/novel/SubtreePreview";
 
 import { useI18n, useToast, useTrashCount } from "@/composables";
@@ -154,6 +155,7 @@ export default function Editor() {
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [words, setWords] = useState(0);
+  const [timelineVersion, setTimelineVersion] = useState(0);
   const [loading, setLoading] = useState(false);
   const [failedChapterId, setFailedChapterId] = useState<string | null>(null);
   const [focusedParagraphId, setFocusedParagraphId] = useState<string | null>(
@@ -912,6 +914,7 @@ export default function Editor() {
                   onMoveNode={moveOutline}
                   onUpdateNode={updateOutlineMeta}
                   onDeleteVolume={(id) => setPendingVolumeDelete(id)}
+                  timelineVersion={timelineVersion}
                 />
               </div>
             </ResizablePanel>
@@ -1071,15 +1074,6 @@ export default function Editor() {
 
                 {sideTab === "chapter" ? (
                   <div className="scrollbar-app flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
-                    <section className="flex flex-col gap-2">
-                      <h2 className="row-label">{t("Editor.side.jump")}</h2>
-                      <p className="text-muted-foreground/70 text-xs tabular-nums">
-                        {words} {t("Editor.chapter.words")}
-                      </p>
-                    </section>
-
-                    <Separator />
-
                     {/*
                      * 章节内容：状态、一句话摘要、情节小结。
                      *
@@ -1127,6 +1121,16 @@ export default function Editor() {
                         ) : null}
                       </section>
                     ) : null}
+
+                    <ChapterEmotionSection
+                      root={root}
+                      workId={currentWorkId}
+                      chapterId={chapter?.id ?? null}
+                      refreshVersion={dataVersion}
+                      onTimelineChange={() =>
+                        setTimelineVersion((current) => current + 1)
+                      }
+                    />
 
                     <section className="mt-auto flex flex-col gap-2">
                       <div className="flex items-center justify-between gap-2">

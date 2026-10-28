@@ -8,6 +8,7 @@ import { LIBRARY_COMMANDS } from "./library";
 import { OUTLINE_COMMANDS } from "./outline";
 import { SEARCH_COMMANDS } from "./search";
 import { STATS_COMMANDS } from "./stats";
+import { TIMELINE_COMMANDS } from "./timeline";
 import { TRASH_COMMANDS } from "./trash";
 import { WORKSPACE_COMMANDS } from "./workspace";
 import { WORKSPACE_LIFECYCLE_COMMANDS } from "./workspace-lifecycle";
@@ -26,6 +27,7 @@ export const APP_COMMANDS: readonly RegisteredAppCommand[] = [
   ...CODEX_COMMANDS,
   ...SEARCH_COMMANDS,
   ...STATS_COMMANDS,
+  ...TIMELINE_COMMANDS,
   ...DRAFT_COMMANDS,
   ...TRASH_COMMANDS,
   ...IMPORT_EXPORT_COMMANDS,

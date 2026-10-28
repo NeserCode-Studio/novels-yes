@@ -41,6 +41,8 @@ interface CodexEntryCreateDialogProps {
   onOpenChange: (open: boolean) => void;
   initialTypeId?: string;
   fixedTypeId?: string;
+  title?: string;
+  description?: string;
   onCreated?: (entry: Entry) => void;
 }
 
@@ -49,6 +51,8 @@ export function CodexEntryCreateDialog({
   onOpenChange,
   initialTypeId,
   fixedTypeId,
+  title,
+  description,
   onCreated,
 }: CodexEntryCreateDialogProps) {
   const { t } = useI18n();
@@ -153,10 +157,10 @@ export function CodexEntryCreateDialog({
               >
                 <TypeGlyph icon={selectedType?.icon} className="size-3.5" />
               </span>
-              {t("Codex.new")}
+              {title ?? t("Codex.new")}
             </DialogTitle>
             <DialogDescription className="text-xs leading-relaxed">
-              {t("Codex.createDescription")}
+              {description ?? t("Codex.createDescription")}
             </DialogDescription>
           </DialogHeader>
 
