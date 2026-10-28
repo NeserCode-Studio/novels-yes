@@ -10,6 +10,7 @@
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
     "PingFang SC", sans-serif;
   --app-font-ui-size: 14px;
+  --app-font-ui-root-size: 16px;
   --app-font-article:
     "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", SimSun, serif;
   --app-font-article-size: 18px;
@@ -447,6 +448,8 @@
 
 html {
   color-scheme: light;
+  font-family: var(--app-font-ui);
+  font-size: var(--app-font-ui-root-size);
 }
 html.dark {
   color-scheme: dark;

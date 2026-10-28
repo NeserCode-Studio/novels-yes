@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+
+import FontStackSelect from "@/components/settings/FontStackSelect";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -11,17 +14,12 @@ import {
 
 import { useI18n } from "@/composables";
 import {
-  ARTICLE_FONT_LABELS,
-  UI_FONT_LABELS,
-} from "@/contexts/preferences.provider";
-import {
   CHAPTER_TURN_THRESHOLD_MAX,
   CHAPTER_TURN_THRESHOLD_MIN,
   CHAPTER_TURN_THRESHOLD_STEP,
-  type ArticleFont,
-  type UiFont,
   usePreferences,
 } from "@/contexts/preferences";
+import { listSystemFonts } from "@/services/fonts";
 
 /**
  * 写作偏好面板：段落约定、排版、两级字体与翻章交互。
@@ -31,25 +29,37 @@ import {
  * - 文章字体：作用于正文卡片与输入框
  */
 export default function WritingPrefs() {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const { prefs, setPref } = usePreferences();
-  const isZh = lang === "zh-CN";
-
-  const uiFontItems = (Object.keys(UI_FONT_LABELS) as UiFont[]).map((key) => ({
-    value: key,
-    label: isZh ? UI_FONT_LABELS[key].zh : UI_FONT_LABELS[key].en,
-  }));
-  const articleFontItems = (
-    Object.keys(ARTICLE_FONT_LABELS) as ArticleFont[]
-  ).map((key) => ({
-    value: key,
-    label: isZh ? ARTICLE_FONT_LABELS[key].zh : ARTICLE_FONT_LABELS[key].en,
-  }));
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+  const [fontsLoading, setFontsLoading] = useState(true);
+  const [fontsLoadFailed, setFontsLoadFailed] = useState(false);
   const indentItems = [
     { value: "0", label: t("Prefs.indent.none") },
     { value: "2", label: t("Prefs.indent.two") },
     { value: "4", label: t("Prefs.indent.four") },
   ];
+
+  useEffect(() => {
+    let active = true;
+    setFontsLoading(true);
+    setFontsLoadFailed(false);
+
+    void listSystemFonts()
+      .then((fonts) => {
+        if (active) setSystemFonts(fonts);
+      })
+      .catch(() => {
+        if (active) setFontsLoadFailed(true);
+      })
+      .finally(() => {
+        if (active) setFontsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     /*
@@ -61,23 +71,14 @@ export default function WritingPrefs() {
     <div className="flex flex-col gap-6">
       <PrefsGroup title={t("Prefs.ui.section")}>
         <PrefsRow label={t("Prefs.ui.font")}>
-          <Select
-            value={prefs.uiFont}
-            onValueChange={(v) => setPref("uiFont", v as UiFont)}
-          >
-            <SelectTrigger className="w-44" dir={isZh ? "rtl" : "ltr"}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {uiFontItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  <span style={{ fontFamily: `var(--app-font-ui)` }}>
-                    {item.label}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FontStackSelect
+            title={t("Prefs.ui.font")}
+            value={prefs.uiFontStack}
+            options={systemFonts}
+            loading={fontsLoading}
+            loadFailed={fontsLoadFailed}
+            onChange={(value) => setPref("uiFontStack", value)}
+          />
         </PrefsRow>
 
         <PrefsRow
@@ -96,23 +97,14 @@ export default function WritingPrefs() {
 
       <PrefsGroup title={t("Prefs.article.section")}>
         <PrefsRow label={t("Prefs.article.font")}>
-          <Select
-            value={prefs.articleFont}
-            onValueChange={(v) => setPref("articleFont", v as ArticleFont)}
-          >
-            <SelectTrigger className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {articleFontItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  <span style={{ fontFamily: "var(--app-font-article)" }}>
-                    {item.label}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FontStackSelect
+            title={t("Prefs.article.font")}
+            value={prefs.articleFontStack}
+            options={systemFonts}
+            loading={fontsLoading}
+            loadFailed={fontsLoadFailed}
+            onChange={(value) => setPref("articleFontStack", value)}
+          />
         </PrefsRow>
 
         <PrefsRow

@@ -6,12 +6,21 @@ import { createContext, useContext } from "react";
  * 与普通 UI 设置（标题、语言）分开，因为它同时作用于界面字体与正文排版。
  */
 
-/** 界面字体（软件 UI）。 */
-export type UiFont = "system-sans" | "system-serif" | "system-mono";
+export const MAX_FONT_STACK_SIZE = 8;
 
-/** 正文字体（文章排版）。 */
-export type ArticleFont =
-  "songti" | "source-han-serif" | "lxgw-wenkai" | "system-sans";
+export const DEFAULT_UI_FONT_STACK = [
+  "Segoe UI",
+  "Microsoft YaHei",
+  "PingFang SC",
+] as const;
+
+export const DEFAULT_ARTICLE_FONT_STACK = [
+  "Source Han Serif SC",
+  "Noto Serif CJK SC",
+  "Songti SC",
+  "SimSun",
+  "STSong",
+] as const;
 
 /** 贴边翻章所需累计滚动距离（像素）。 */
 export const CHAPTER_TURN_THRESHOLD_MIN = 120;
@@ -31,14 +40,14 @@ export interface WritingPreferences {
   lineWidth: number;
   /** 行高倍数。 */
   lineHeight: number;
-  /** 正文字体。 */
-  articleFont: ArticleFont;
+  /** 正文字体族序列，按优先级排列。 */
+  articleFontStack: string[];
   /** 正文字号（px）。 */
   fontSize: number;
 
   /* ---- 界面 ---- */
-  /** 软件界面字体。 */
-  uiFont: UiFont;
+  /** 软件界面字体族序列，按优先级排列。 */
+  uiFontStack: string[];
   /** 界面字号（px）。 */
   uiFontSize: number;
   /** 正文中高亮素材条目的提及。 */
@@ -60,9 +69,9 @@ export const DEFAULT_PREFERENCES: WritingPreferences = {
   paragraphGap: false,
   lineWidth: 40,
   lineHeight: 1.8,
-  articleFont: "songti",
+  articleFontStack: [...DEFAULT_ARTICLE_FONT_STACK],
   fontSize: 18,
-  uiFont: "system-sans",
+  uiFontStack: [...DEFAULT_UI_FONT_STACK],
   uiFontSize: 14,
   highlightMentions: true,
   searchHotkeyEnabled: true,

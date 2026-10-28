@@ -1,4 +1,5 @@
 mod export_bridge;
+mod font_bridge;
 mod fs_bridge;
 mod mcp;
 mod zhuque_ai;
@@ -105,6 +106,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             open_devtools,
+            font_bridge::system_fonts_list,
             fs_bridge::fs_read_text,
             fs_bridge::fs_write_text,
             fs_bridge::fs_read_dir,

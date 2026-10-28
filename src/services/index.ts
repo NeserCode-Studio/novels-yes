@@ -5,6 +5,7 @@
  */
 
 export * from "./fs";
+export * from "./fonts";
 export * from "./paths";
 export * from "./workspace";
 export * from "./outline";

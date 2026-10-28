@@ -14,11 +14,17 @@ const writingPreferencesSchema = z
     paragraphGap: z.boolean().optional(),
     lineWidth: z.number().int().min(12).max(120).optional(),
     lineHeight: z.number().min(1).max(3).optional(),
-    articleFont: z
-      .enum(["songti", "source-han-serif", "lxgw-wenkai", "system-sans"])
+    articleFontStack: z
+      .array(z.string().trim().min(1).max(200))
+      .min(1)
+      .max(8)
       .optional(),
     fontSize: z.number().int().min(10).max(48).optional(),
-    uiFont: z.enum(["system-sans", "system-serif", "system-mono"]).optional(),
+    uiFontStack: z
+      .array(z.string().trim().min(1).max(200))
+      .min(1)
+      .max(8)
+      .optional(),
     uiFontSize: z.number().int().min(10).max(32).optional(),
     highlightMentions: z.boolean().optional(),
     searchHotkeyEnabled: z.boolean().optional(),
