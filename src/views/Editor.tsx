@@ -54,6 +54,7 @@ import {
   ResizablePanelGroup,
   type ImperativePanelHandle,
 } from "@/components/ui/resizable";
+import { Tooltip } from "@/components/framework/Tooltip";
 
 import ChapterStream, {
   type ChapterLanding,
@@ -1072,10 +1073,6 @@ export default function Editor() {
                   <div className="scrollbar-app flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
                     <section className="flex flex-col gap-2">
                       <h2 className="row-label">{t("Editor.side.jump")}</h2>
-                      <p className="text-muted-foreground text-sm">
-                        {chapterIndex >= 0 ? chapterIndex + 1 : 0} /{" "}
-                        {chapterSequence.length}
-                      </p>
                       <p className="text-muted-foreground/70 text-xs tabular-nums">
                         {words} {t("Editor.chapter.words")}
                       </p>
@@ -1131,30 +1128,40 @@ export default function Editor() {
                       </section>
                     ) : null}
 
-                    <section className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1"
-                          disabled={!prevId}
-                          onClick={() => prevId && selectChapter(prevId, "end")}
-                        >
-                          <ChevronLeft className="icon-md" />
-                          {t("Editor.nav.prev")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1"
-                          disabled={!nextId}
-                          onClick={() =>
-                            nextId && selectChapter(nextId, "start")
-                          }
-                        >
-                          {t("Editor.nav.next")}
-                          <ChevronRight className="icon-md" />
-                        </Button>
+                    <section className="mt-auto flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Tooltip content={t("Editor.nav.prev")}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="size-7 p-0"
+                            aria-label={t("Editor.nav.prev")}
+                            disabled={!prevId}
+                            onClick={() =>
+                              prevId && selectChapter(prevId, "end")
+                            }
+                          >
+                            <ChevronLeft className="icon-md" />
+                          </Button>
+                        </Tooltip>
+                        <span className="text-muted-foreground text-xs tabular-nums">
+                          {chapterIndex >= 0 ? chapterIndex + 1 : 0} /{" "}
+                          {chapterSequence.length}
+                        </span>
+                        <Tooltip content={t("Editor.nav.next")}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="size-7 p-0"
+                            aria-label={t("Editor.nav.next")}
+                            disabled={!nextId}
+                            onClick={() =>
+                              nextId && selectChapter(nextId, "start")
+                            }
+                          >
+                            <ChevronRight className="icon-md" />
+                          </Button>
+                        </Tooltip>
                       </div>
 
                       {!nextId ? (
