@@ -3,11 +3,7 @@ import { Plus } from "lucide-react";
 
 import { useI18n, useToast } from "@/composables";
 import { useCodex } from "@/contexts/codex";
-import {
-  typeLabel,
-  type Entry,
-  type FieldValue,
-} from "@/services/codex";
+import { typeLabel, type Entry, type FieldValue } from "@/services/codex";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,6 +40,7 @@ interface CodexEntryCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialTypeId?: string;
+  fixedTypeId?: string;
   onCreated?: (entry: Entry) => void;
 }
 
@@ -51,13 +48,16 @@ export function CodexEntryCreateDialog({
   open,
   onOpenChange,
   initialTypeId,
+  fixedTypeId,
   onCreated,
 }: CodexEntryCreateDialogProps) {
   const { t } = useI18n();
   const toast = useToast();
   const { typeConfigs, create, save, colorOf } = useCodex();
   const fallbackTypeId = typeConfigs[0]?.id ?? "";
-  const [typeId, setTypeId] = useState(initialTypeId || fallbackTypeId);
+  const [typeId, setTypeId] = useState(
+    fixedTypeId || initialTypeId || fallbackTypeId
+  );
   const [name, setName] = useState("");
   const [summary, setSummary] = useState("");
   const [aliases, setAliases] = useState("");
@@ -69,6 +69,9 @@ export function CodexEntryCreateDialog({
 
   const selectedType =
     typeConfigs.find((type) => type.id === typeId) ?? typeConfigs[0] ?? null;
+  const typeLocked = Boolean(
+    fixedTypeId && typeConfigs.some((type) => type.id === fixedTypeId)
+  );
   const fieldList = useMemo(
     () => selectedType?.fields.slice().sort((a, b) => a.order - b.order) ?? [],
     [selectedType]
@@ -77,10 +80,11 @@ export function CodexEntryCreateDialog({
   useEffect(() => {
     if (!open) return;
     const nextType =
-      initialTypeId &&
-      typeConfigs.some((type) => type.id === initialTypeId)
-        ? initialTypeId
-        : fallbackTypeId;
+      fixedTypeId && typeConfigs.some((type) => type.id === fixedTypeId)
+        ? fixedTypeId
+        : initialTypeId && typeConfigs.some((type) => type.id === initialTypeId)
+          ? initialTypeId
+          : fallbackTypeId;
     setTypeId(nextType);
     setName("");
     setSummary("");
@@ -89,9 +93,10 @@ export function CodexEntryCreateDialog({
     setBody("");
     setFields({});
     setAttempted(false);
-  }, [fallbackTypeId, initialTypeId, open, typeConfigs]);
+  }, [fallbackTypeId, fixedTypeId, initialTypeId, open, typeConfigs]);
 
   function changeType(nextTypeId: string) {
+    if (typeLocked) return;
     setTypeId(nextTypeId);
     setFields({});
   }
@@ -142,7 +147,9 @@ export function CodexEntryCreateDialog({
             <DialogTitle className="flex items-center gap-2 text-base">
               <span
                 className="bg-muted flex size-7 items-center justify-center rounded-md"
-                style={{ color: selectedType ? colorOf(selectedType.id) : undefined }}
+                style={{
+                  color: selectedType ? colorOf(selectedType.id) : undefined,
+                }}
               >
                 <TypeGlyph icon={selectedType?.icon} className="size-3.5" />
               </span>
@@ -157,7 +164,11 @@ export function CodexEntryCreateDialog({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
               <label className="flex min-w-0 flex-col gap-1.5">
                 <span className="text-xs font-medium">{t("Codex.type")}</span>
-                <Select value={selectedType?.id ?? ""} onValueChange={changeType}>
+                <Select
+                  value={selectedType?.id ?? ""}
+                  disabled={typeLocked}
+                  onValueChange={changeType}
+                >
                   <SelectTrigger aria-label={t("Codex.type")}>
                     <SelectValue placeholder={t("Codex.type")} />
                   </SelectTrigger>
@@ -192,7 +203,9 @@ export function CodexEntryCreateDialog({
               </label>
 
               <label className="flex min-w-0 flex-col gap-1.5 sm:col-span-2">
-                <span className="text-xs font-medium">{t("Codex.summary")}</span>
+                <span className="text-xs font-medium">
+                  {t("Codex.summary")}
+                </span>
                 <Input
                   value={summary}
                   placeholder={t("Codex.summaryPlaceholder")}
@@ -201,7 +214,9 @@ export function CodexEntryCreateDialog({
               </label>
 
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-xs font-medium">{t("Codex.aliases")}</span>
+                <span className="text-xs font-medium">
+                  {t("Codex.aliases")}
+                </span>
                 <Input
                   value={aliases}
                   onChange={(event) => setAliases(event.target.value)}

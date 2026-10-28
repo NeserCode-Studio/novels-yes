@@ -11,7 +11,6 @@ import {
   ArrowUp,
   ArrowUpDown,
   BookOpen,
-  CalendarClock,
   ChevronRight,
   Grid2X2,
   History,
@@ -22,7 +21,9 @@ import {
   Radar,
   Search,
   Settings2,
+  Waypoints,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useLocalStorageState } from "ahooks";
 
@@ -36,7 +37,6 @@ import {
   typeLabel,
   type Entry,
   type MentionRecord,
-  type Relation,
   type TypeConfig,
 } from "@/services/codex";
 import { Button } from "@/components/ui/button";
@@ -64,12 +64,14 @@ import { CodexEntryCreateDialog } from "@/components/novel/codex/CodexEntryCreat
 import { CodexPreview } from "@/components/novel/codex/CodexPreview";
 import { CodexTypeManager } from "@/components/novel/codex/CodexTypeManager";
 import { TypeGlyph } from "@/components/novel/codex/TypeGlyph";
+import { StoryTimelinePanel } from "@/components/novel/codex/timeline/StoryTimelinePanel";
 import { useJumpHighlight } from "@/hooks/useJumpHighlight";
 import { loadChapter } from "@/services/chapter";
 import { createLogger } from "@/lib/logger";
 import { useAppNavigation } from "@/lib/navigation";
 
-type ViewMode = "grid" | "list" | "timeline";
+type ViewMode = "grid" | "list";
+type LibraryContent = "materials" | "timeline";
 type SortMode = "name" | "updated" | "type";
 type SortDirection = "asc" | "desc";
 type SearchSuggestionKind = "recent" | "work";
@@ -119,198 +121,6 @@ function entryHaystack(entry: Entry, workTitles: string[] = []): string {
   ].join("\n");
 }
 
-function fieldNumber(entry: Entry, key: string): number | null {
-  const value = entry.fields[key];
-  return value?.kind === "number" && Number.isFinite(value.value)
-    ? value.value
-    : null;
-}
-
-function fieldText(entry: Entry, key: string): string {
-  const value = entry.fields[key];
-  if (!value || value.kind === "ref" || value.kind === "refs") return "";
-  return String(value.value);
-}
-
-function referencedIds(entry: Entry, key: string): string[] {
-  const value = entry.fields[key];
-  if (value?.kind === "ref") return value.value ? [value.value] : [];
-  if (value?.kind === "refs") return value.value;
-  return [];
-}
-
-function TimelineView({
-  events,
-  allEntries,
-  relations,
-  currentEntryId,
-  onSelect,
-  onEdit,
-  onCreate,
-  highlightedEntryId,
-}: {
-  events: Entry[];
-  allEntries: Entry[];
-  relations: Relation[];
-  currentEntryId: string | null;
-  onSelect: (entryId: string) => void;
-  onEdit: (entryId: string) => void;
-  onCreate: () => void;
-  highlightedEntryId: string | null;
-}) {
-  const { t } = useI18n();
-  const { colorOf } = useCodex();
-  const ordered = useMemo(
-    () =>
-      [...events].sort((a, b) => {
-        const aOrder = fieldNumber(a, "order");
-        const bOrder = fieldNumber(b, "order");
-        if (aOrder === null && bOrder === null) {
-          return a.name.localeCompare(b.name, "zh-Hans-CN");
-        }
-        if (aOrder === null) return 1;
-        if (bOrder === null) return -1;
-        return aOrder - bOrder || a.name.localeCompare(b.name, "zh-Hans-CN");
-      }),
-    [events]
-  );
-  const relatedIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (!currentEntryId) return ids;
-    ids.add(currentEntryId);
-    for (const relation of relations) {
-      if (relation.fromId === currentEntryId) ids.add(relation.toId);
-      if (relation.toId === currentEntryId) ids.add(relation.fromId);
-    }
-    for (const event of events) {
-      const refs = [
-        ...referencedIds(event, "place"),
-        ...referencedIds(event, "participants"),
-      ];
-      if (refs.includes(currentEntryId)) ids.add(event.id);
-    }
-    return ids;
-  }, [currentEntryId, events, relations]);
-
-  if (!ordered.length) {
-    return (
-      <div className="flex min-h-80 flex-col items-center justify-center gap-3 px-6 text-center">
-        <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
-          <CalendarClock className="size-5" />
-        </div>
-        <div>
-          <p className="text-sm font-medium">{t("Codex.timeline.empty")}</p>
-          <p className="text-muted-foreground mt-1 max-w-sm text-xs leading-relaxed">
-            {t("Codex.timeline.emptyHint")}
-          </p>
-        </div>
-        <Button type="button" size="sm" onClick={onCreate}>
-          <Plus className="size-3.5" />
-          {t("Codex.new")}
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col pt-2">
-      {ordered.map((event, index) => {
-        const color = colorOf(event.typeId);
-        const time = fieldText(event, "time").trim();
-        const placeIds = referencedIds(event, "place");
-        const participantIds = referencedIds(event, "participants");
-        const place = placeIds
-          .map((id) => allEntries.find((entry) => entry.id === id)?.name)
-          .filter((name): name is string => Boolean(name));
-        const participants = participantIds
-          .map((id) => allEntries.find((entry) => entry.id === id)?.name)
-          .filter((name): name is string => Boolean(name));
-        const refs = [...new Set([...place, ...participants])];
-        const selected = event.id === currentEntryId;
-        const related = relatedIds.has(event.id);
-        const last = index === ordered.length - 1;
-        return (
-          <div key={event.id} className="relative pl-8">
-            <span
-              className={[
-                "bg-border absolute left-2 w-px",
-                index === 0 ? "top-5" : "top-0",
-                last ? "bottom-5" : "bottom-0",
-              ].join(" ")}
-            />
-            <span
-              className="bg-background absolute top-[15px] left-[3px] size-2.5 rounded-full border-2"
-              style={{ borderColor: color }}
-            />
-            <button
-              type="button"
-              data-codex-entry={event.id}
-              onClick={() => onSelect(event.id)}
-              onDoubleClick={() => onEdit(event.id)}
-              className={[
-                "mb-2.5 w-full rounded-md border px-3 py-2.5 text-left transition-colors",
-                event.id === highlightedEntryId ? "jump-highlight" : "",
-                selected
-                  ? "border-primary/30 bg-accent/45"
-                  : related
-                    ? "border-border bg-muted/15 hover:bg-accent/30"
-                    : "hover:border-foreground/15 hover:bg-accent/25 bg-transparent",
-              ].join(" ")}
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <span
-                  className={[
-                    "shrink-0 text-[11px] font-medium tabular-nums",
-                    time
-                      ? "text-foreground"
-                      : "text-amber-700 dark:text-amber-300",
-                  ].join(" ")}
-                >
-                  {time || t("Codex.timeline.unknown")}
-                </span>
-                <span className="text-muted-foreground/60 ml-auto shrink-0 text-[11px] tabular-nums">
-                  {fieldNumber(event, "order") ?? "-"}
-                </span>
-              </div>
-              <div className="mt-1 flex items-start gap-2">
-                <span
-                  className="mt-[7px] size-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: color }}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium" style={{ color }}>
-                    {event.name}
-                  </p>
-                  <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs leading-relaxed">
-                    {event.summary || event.body || t("Codex.summaryEmpty")}
-                  </p>
-                </div>
-              </div>
-              {refs.length ? (
-                <div className="mt-2 flex flex-wrap gap-1 pl-3.5">
-                  {refs.slice(0, 4).map((name) => (
-                    <span
-                      key={name}
-                      className="bg-muted text-muted-foreground max-w-32 truncate rounded px-1.5 py-0.5 text-[11px]"
-                    >
-                      {name}
-                    </span>
-                  ))}
-                  {refs.length > 4 ? (
-                    <span className="text-muted-foreground/60 px-1 text-[11px]">
-                      +{refs.length - 4}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function TypeRailItem({
   type,
   count,
@@ -353,6 +163,37 @@ function TypeRailItem({
       <span className="text-muted-foreground/60 text-[11px] tabular-nums">
         {count}
       </span>
+    </button>
+  );
+}
+
+function ContentRailItem({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={[
+        "group flex min-h-9 w-full items-center gap-2 rounded-md border px-2 text-left text-sm transition-colors",
+        active
+          ? "border-primary/30 bg-accent text-accent-foreground font-medium"
+          : "text-muted-foreground hover:bg-accent/55 hover:text-foreground border-transparent",
+      ].join(" ")}
+    >
+      <span className="bg-muted/60 flex size-5 shrink-0 items-center justify-center rounded">
+        <Icon className="size-3" />
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>
   );
 }
@@ -547,7 +388,6 @@ export default function CodexLibrary() {
   const { root } = useWorkspace();
   const {
     entries,
-    relations,
     mentions,
     typeConfigs,
     currentEntryId,
@@ -563,6 +403,8 @@ export default function CodexLibrary() {
     useLocalStorageState<Record<string, string[]>>(RECENT_SEARCH_KEY, {
       defaultValue: {},
     });
+  const [libraryContent, setLibraryContent] =
+    useState<LibraryContent>("materials");
   const [typeFilter, setTypeFilter] = useState<string | "all">("all");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [sortMode, setSortMode] = useState<SortMode>("name");
@@ -584,13 +426,11 @@ export default function CodexLibrary() {
     const requestedQuery = takeSearchRequest();
     if (!requestedQuery) return;
     pinnedEntryIdRef.current = currentEntryId;
+    setLibraryContent("materials");
     setQuery(requestedQuery);
   }, [currentEntryId, takeSearchRequest]);
 
   const current = entries.find((entry) => entry.id === currentEntryId) ?? null;
-  const timelineEventType =
-    typeConfigs.find((type) => type.id === "event") ?? null;
-  const timelineAvailable = Boolean(timelineEventType);
 
   useEffect(() => {
     if (
@@ -621,16 +461,6 @@ export default function CodexLibrary() {
       setTypeFilter("all");
     }
   }, [typeConfigs, typeFilter]);
-
-  useEffect(() => {
-    if (
-      viewMode === "timeline" &&
-      typeFilter !== "all" &&
-      typeFilter !== "event"
-    ) {
-      setViewMode("grid");
-    }
-  }, [typeFilter, viewMode]);
 
   async function scanMentions() {
     if (scanning) return;
@@ -815,22 +645,12 @@ export default function CodexLibrary() {
     workTitlesByEntry,
   ]);
 
-  const timelineEvents = useMemo(
-    () => filtered.filter((entry) => entry.typeId === "event"),
-    [filtered]
-  );
-  const visibleEntries = viewMode === "timeline" ? timelineEvents : filtered;
-
   const builtinTypes = typeConfigs.filter((type) => type.builtin);
   const customTypes = typeConfigs.filter((type) => !type.builtin);
   const initialNewType =
-    viewMode === "timeline"
-      ? "event"
-      : typeFilter !== "all"
-        ? typeFilter
-        : (typeConfigs[0]?.id ?? "");
+    typeFilter !== "all" ? typeFilter : (typeConfigs[0]?.id ?? "");
   const filteredActive = Boolean(query.trim()) || typeFilter !== "all";
-  const visibleCount = visibleEntries.length;
+  const visibleCount = filtered.length;
 
   function openCreate() {
     setCreateOpen(true);
@@ -844,16 +664,13 @@ export default function CodexLibrary() {
 
   function jumpToEntry(entryId: string) {
     pinnedEntryIdRef.current = null;
-    const target = entries.find((entry) => entry.id === entryId);
     const targetVisible = filtered.some((entry) => entry.id === entryId);
-    const timelineNeedsGrid =
-      viewMode === "timeline" && target?.typeId !== "event";
     setCurrentEntryId(entryId);
     if (!targetVisible) {
       setQuery("");
       setTypeFilter("all");
     }
-    if (timelineNeedsGrid) setViewMode("grid");
+    setLibraryContent("materials");
     window.requestAnimationFrame(() => jumpTo(entryId));
   }
 
@@ -910,6 +727,7 @@ export default function CodexLibrary() {
   }
 
   function changeTypeFilter(value: string | "all") {
+    setLibraryContent("materials");
     setTypeFilter(value);
     revealCurrentEntryAfterLayout();
   }
@@ -1023,8 +841,8 @@ export default function CodexLibrary() {
     ) {
       return;
     }
-    if (!visibleEntries.length) return;
-    const currentIndex = visibleEntries.findIndex(
+    if (!filtered.length) return;
+    const currentIndex = filtered.findIndex(
       (entry) => entry.id === currentEntryId
     );
     if (
@@ -1039,24 +857,21 @@ export default function CodexLibrary() {
       const nextIndex =
         currentIndex < 0
           ? 0
-          : (currentIndex + direction + visibleEntries.length) %
-            visibleEntries.length;
-      setCurrentEntryId(visibleEntries[nextIndex].id);
+          : (currentIndex + direction + filtered.length) % filtered.length;
+      setCurrentEntryId(filtered[nextIndex].id);
       requestAnimationFrame(() => {
         document
           .querySelector<HTMLElement>(
-            `[data-codex-entry="${visibleEntries[nextIndex].id}"]`
+            `[data-codex-entry="${filtered[nextIndex].id}"]`
           )
           ?.scrollIntoView({ block: "nearest" });
       });
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      const selectedId = visibleEntries.some(
-        (entry) => entry.id === currentEntryId
-      )
+      const selectedId = filtered.some((entry) => entry.id === currentEntryId)
         ? currentEntryId
-        : visibleEntries[0]?.id;
+        : filtered[0]?.id;
       if (selectedId) editEntry(selectedId);
     }
     if (event.key === "Escape") {
@@ -1071,9 +886,16 @@ export default function CodexLibrary() {
         <TypeRailItem
           type={null}
           count={entries.length}
-          active={typeFilter === "all"}
+          active={libraryContent === "materials" && typeFilter === "all"}
           onClick={() => changeTypeFilter("all")}
         />
+        <ContentRailItem
+          icon={Waypoints}
+          label={t("Codex.timeline.section")}
+          active={libraryContent === "timeline"}
+          onClick={() => setLibraryContent("timeline")}
+        />
+        <div className="bg-border my-2 h-px" />
         <p className="text-muted-foreground/70 px-2 pt-3 pb-1 text-[11px] font-semibold">
           {t("Codex.type.builtinSection")}
         </p>
@@ -1083,7 +905,7 @@ export default function CodexLibrary() {
               key={type.id}
               type={type}
               count={counts.get(type.id) ?? 0}
-              active={typeFilter === type.id}
+              active={libraryContent === "materials" && typeFilter === type.id}
               onClick={() => changeTypeFilter(type.id)}
             />
           ))}
@@ -1099,7 +921,9 @@ export default function CodexLibrary() {
                   key={type.id}
                   type={type}
                   count={counts.get(type.id) ?? 0}
-                  active={typeFilter === type.id}
+                  active={
+                    libraryContent === "materials" && typeFilter === type.id
+                  }
                   onClick={() => changeTypeFilter(type.id)}
                 />
               ))}
@@ -1121,23 +945,39 @@ export default function CodexLibrary() {
   const content = (
     <div
       className="flex h-full min-h-0 w-full min-w-0 flex-col"
-      onKeyDown={handleKeyDown}
-      tabIndex={0}
+      onKeyDown={libraryContent === "materials" ? handleKeyDown : undefined}
+      tabIndex={libraryContent === "materials" ? 0 : -1}
     >
       {narrow ? (
         <div className="scrollbar-app flex shrink-0 items-center gap-1 overflow-x-auto border-b px-3 py-2">
           <button
             type="button"
-            aria-pressed={typeFilter === "all"}
+            aria-pressed={
+              libraryContent === "materials" && typeFilter === "all"
+            }
             className={[
               "shrink-0 rounded border px-2 py-1 text-sm",
-              typeFilter === "all"
+              libraryContent === "materials" && typeFilter === "all"
                 ? "border-primary/30 bg-accent text-accent-foreground font-medium"
                 : "text-muted-foreground hover:bg-accent/60 border-transparent",
             ].join(" ")}
             onClick={() => changeTypeFilter("all")}
           >
             {t("Codex.all")} {entries.length}
+          </button>
+          <button
+            type="button"
+            aria-pressed={libraryContent === "timeline"}
+            className={[
+              "flex shrink-0 items-center gap-1 rounded border px-2 py-1 text-sm",
+              libraryContent === "timeline"
+                ? "border-primary/30 bg-accent text-accent-foreground font-medium"
+                : "text-muted-foreground hover:bg-accent/60 border-transparent",
+            ].join(" ")}
+            onClick={() => setLibraryContent("timeline")}
+          >
+            <Waypoints className="size-3" />
+            {t("Codex.timeline.section")}
           </button>
           <span className="bg-border mx-1 h-4 w-px shrink-0" />
           <span className="text-muted-foreground/70 shrink-0 text-[11px] font-semibold">
@@ -1147,10 +987,12 @@ export default function CodexLibrary() {
             <button
               key={type.id}
               type="button"
-              aria-pressed={typeFilter === type.id}
+              aria-pressed={
+                libraryContent === "materials" && typeFilter === type.id
+              }
               className={[
                 "flex shrink-0 items-center gap-1 rounded border px-2 py-1 text-sm",
-                typeFilter === type.id
+                libraryContent === "materials" && typeFilter === type.id
                   ? "border-primary/30 bg-accent text-accent-foreground font-medium"
                   : "text-muted-foreground hover:bg-accent/60 border-transparent",
               ].join(" ")}
@@ -1173,10 +1015,12 @@ export default function CodexLibrary() {
                 <button
                   key={type.id}
                   type="button"
-                  aria-pressed={typeFilter === type.id}
+                  aria-pressed={
+                    libraryContent === "materials" && typeFilter === type.id
+                  }
                   className={[
                     "flex shrink-0 items-center gap-1 rounded border px-2 py-1 text-sm",
-                    typeFilter === type.id
+                    libraryContent === "materials" && typeFilter === type.id
                       ? "border-primary/30 bg-accent text-accent-foreground font-medium"
                       : "text-muted-foreground hover:bg-accent/60 border-transparent",
                   ].join(" ")}
@@ -1203,91 +1047,47 @@ export default function CodexLibrary() {
         </div>
       ) : null}
 
-      <div className="scrollbar-app min-h-0 w-full flex-1 overflow-y-auto">
-        <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-          <p className="text-muted-foreground text-sm font-medium">
-            {viewMode === "timeline"
-              ? typeLabel(timelineEventType, t)
-              : typeFilter === "all"
+      {libraryContent === "timeline" ? (
+        <div className="min-h-0 w-full flex-1">
+          <StoryTimelinePanel onOpenEntry={editEntry} />
+        </div>
+      ) : (
+        <div className="scrollbar-app min-h-0 w-full flex-1 overflow-y-auto">
+          <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+            <p className="text-muted-foreground text-sm font-medium">
+              {typeFilter === "all"
                 ? t("Codex.all")
                 : typeLabel(
                     typeConfigs.find((type) => type.id === typeFilter),
                     t
                   )}
-          </p>
-          <span className="text-muted-foreground/60 text-[11px] tabular-nums">
-            {visibleCount}
-          </span>
-          <div className="ml-auto flex items-center gap-2">
-            {query ? (
-              <button
-                type="button"
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
-                onClick={() => setQuery("")}
-              >
-                <X className="size-3" />
-                {t("Codex.clearSearch")}
-              </button>
-            ) : null}
-            <span className="text-muted-foreground/70 hidden items-center gap-1 text-[11px] sm:flex">
-              <MousePointerClick className="size-3.5" />
-              {t("Codex.library.doubleClick")}
+            </p>
+            <span className="text-muted-foreground/60 text-[11px] tabular-nums">
+              {visibleCount}
             </span>
-          </div>
-        </div>
-
-        {viewMode === "timeline" ? (
-          <div className="px-4 pb-8">
-            <TimelineView
-              events={timelineEvents}
-              allEntries={entries}
-              relations={relations}
-              currentEntryId={currentEntryId}
-              highlightedEntryId={highlightId}
-              onSelect={selectEntry}
-              onEdit={editEntry}
-              onCreate={openCreate}
-            />
-          </div>
-        ) : filtered.length ? (
-          viewMode === "grid" ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(215px,1fr))] gap-2.5 px-4 pb-8">
-              {filtered.map((entry) => (
-                <EntryCard
-                  key={entry.id}
-                  entry={entry}
-                  type={
-                    typeConfigs.find((type) => type.id === entry.typeId) ?? null
-                  }
-                  selected={entry.id === currentEntryId}
-                  mentionCount={mentions[entry.id]?.length ?? 0}
-                  conflict={conflictIds.has(entry.id)}
-                  highlighted={entry.id === highlightId}
-                  onSelect={() => selectEntry(entry.id)}
-                  onEdit={() => editEntry(entry.id)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="w-full min-w-0">
-              <div className="px-1">
-                <div
-                  className={[
-                    LIST_GRID_CLASS,
-                    "text-muted-foreground rounded-md border bg-neutral-100/60 px-3 py-2 text-xs font-medium dark:bg-neutral-800/35",
-                  ].join(" ")}
+            <div className="ml-auto flex items-center gap-2">
+              {query ? (
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+                  onClick={() => setQuery("")}
                 >
-                  <span>{t("Codex.name")}</span>
-                  <span className="hidden sm:block">{t("Codex.type")}</span>
-                  <span className="hidden sm:block">{t("Codex.summary")}</span>
-                  <span className="text-right">
-                    {t("Codex.mentions.short")}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1 p-1">
+                  <X className="size-3" />
+                  {t("Codex.clearSearch")}
+                </button>
+              ) : null}
+              <span className="text-muted-foreground/70 hidden items-center gap-1 text-[11px] sm:flex">
+                <MousePointerClick className="size-3.5" />
+                {t("Codex.library.doubleClick")}
+              </span>
+            </div>
+          </div>
+
+          {filtered.length ? (
+            viewMode === "grid" ? (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(215px,1fr))] gap-2.5 px-4 pb-8">
                 {filtered.map((entry) => (
-                  <EntryRow
+                  <EntryCard
                     key={entry.id}
                     entry={entry}
                     type={
@@ -1303,16 +1103,54 @@ export default function CodexLibrary() {
                   />
                 ))}
               </div>
-            </div>
-          )
-        ) : (
-          <EmptyState
-            filtered={filteredActive}
-            onCreate={openCreate}
-            onClear={clearFilters}
-          />
-        )}
-      </div>
+            ) : (
+              <div className="w-full min-w-0">
+                <div className="px-1">
+                  <div
+                    className={[
+                      LIST_GRID_CLASS,
+                      "text-muted-foreground rounded-md border bg-neutral-100/60 px-3 py-2 text-xs font-medium dark:bg-neutral-800/35",
+                    ].join(" ")}
+                  >
+                    <span>{t("Codex.name")}</span>
+                    <span className="hidden sm:block">{t("Codex.type")}</span>
+                    <span className="hidden sm:block">
+                      {t("Codex.summary")}
+                    </span>
+                    <span className="text-right">
+                      {t("Codex.mentions.short")}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1 p-1">
+                  {filtered.map((entry) => (
+                    <EntryRow
+                      key={entry.id}
+                      entry={entry}
+                      type={
+                        typeConfigs.find((type) => type.id === entry.typeId) ??
+                        null
+                      }
+                      selected={entry.id === currentEntryId}
+                      mentionCount={mentions[entry.id]?.length ?? 0}
+                      conflict={conflictIds.has(entry.id)}
+                      highlighted={entry.id === highlightId}
+                      onSelect={() => selectEntry(entry.id)}
+                      onEdit={() => editEntry(entry.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          ) : (
+            <EmptyState
+              filtered={filteredActive}
+              onCreate={openCreate}
+              onClear={clearFilters}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -1523,83 +1361,61 @@ export default function CodexLibrary() {
         >
           <List className="size-3.5" />
         </button>
-        {timelineAvailable ? (
-          <button
-            type="button"
-            aria-pressed={viewMode === "timeline"}
-            className={[
-              "flex size-7 items-center justify-center rounded border",
-              viewMode === "timeline"
-                ? "border-primary/30 bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/40 hover:text-foreground border-transparent",
-            ].join(" ")}
-            onClick={() => {
-              setViewMode("timeline");
-              changeTypeFilter("event");
-            }}
-            aria-label={t("Codex.view.timeline")}
-            title={t("Codex.view.timeline")}
-          >
-            <CalendarClock className="size-3.5" />
-          </button>
-        ) : null}
       </div>
 
-      {viewMode !== "timeline" ? (
-        <div className="flex h-9 items-center rounded-md border bg-neutral-100/60 p-0.5 dark:bg-neutral-800/35">
-          <Select
-            value={sortMode}
-            onValueChange={(value) => changeSortMode(value as SortMode)}
+      <div className="flex h-9 items-center rounded-md border bg-neutral-100/60 p-0.5 dark:bg-neutral-800/35">
+        <Select
+          value={sortMode}
+          onValueChange={(value) => changeSortMode(value as SortMode)}
+        >
+          <SelectTrigger
+            className={[
+              "text-muted-foreground hover:bg-accent/40 data-[state=open]:bg-accent/40 dark:hover:bg-accent/40 h-8 border-0 bg-transparent px-2 text-xs shadow-none focus-visible:ring-0 dark:bg-transparent",
+              narrow ? "w-9 [&>svg:last-child]:hidden" : "w-40",
+            ].join(" ")}
+            aria-label={t("Codex.sort")}
+            title={t("Codex.sort")}
           >
-            <SelectTrigger
-              className={[
-                "text-muted-foreground hover:bg-accent/40 data-[state=open]:bg-accent/40 dark:hover:bg-accent/40 h-8 border-0 bg-transparent px-2 text-xs shadow-none focus-visible:ring-0 dark:bg-transparent",
-                narrow ? "w-9 [&>svg:last-child]:hidden" : "w-40",
-              ].join(" ")}
-              aria-label={t("Codex.sort")}
-              title={t("Codex.sort")}
-            >
-              {narrow ? (
-                <ArrowUpDown className="size-3.5" />
-              ) : (
-                <>
-                  <ArrowUpDown className="size-3.5" />
-                  <SelectValue />
-                </>
-              )}
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="name">{t("Codex.sort.name")}</SelectItem>
-              <SelectItem value="updated">{t("Codex.sort.updated")}</SelectItem>
-              <SelectItem value="type">{t("Codex.sort.type")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <span className="bg-border h-4 w-px shrink-0" />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground size-8 rounded"
-            aria-label={t(
-              sortDirection === "asc"
-                ? "Codex.sort.switchToDesc"
-                : "Codex.sort.switchToAsc"
-            )}
-            title={t(
-              sortDirection === "asc"
-                ? "Codex.sort.switchToDesc"
-                : "Codex.sort.switchToAsc"
-            )}
-            onClick={toggleSortDirection}
-          >
-            {sortDirection === "asc" ? (
-              <ArrowUp className="size-3.5" />
+            {narrow ? (
+              <ArrowUpDown className="size-3.5" />
             ) : (
-              <ArrowDown className="size-3.5" />
+              <>
+                <ArrowUpDown className="size-3.5" />
+                <SelectValue />
+              </>
             )}
-          </Button>
-        </div>
-      ) : null}
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="name">{t("Codex.sort.name")}</SelectItem>
+            <SelectItem value="updated">{t("Codex.sort.updated")}</SelectItem>
+            <SelectItem value="type">{t("Codex.sort.type")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="bg-border h-4 w-px shrink-0" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground size-8 rounded"
+          aria-label={t(
+            sortDirection === "asc"
+              ? "Codex.sort.switchToDesc"
+              : "Codex.sort.switchToAsc"
+          )}
+          title={t(
+            sortDirection === "asc"
+              ? "Codex.sort.switchToDesc"
+              : "Codex.sort.switchToAsc"
+          )}
+          onClick={toggleSortDirection}
+        >
+          {sortDirection === "asc" ? (
+            <ArrowUp className="size-3.5" />
+          ) : (
+            <ArrowDown className="size-3.5" />
+          )}
+        </Button>
+      </div>
     </div>
   );
 
@@ -1623,21 +1439,27 @@ export default function CodexLibrary() {
           <>
             <div className="flex h-12 items-center gap-1.5 px-3">
               {libraryHeading}
-              <div className="ml-auto shrink-0">{createButton}</div>
+              {libraryContent === "materials" ? (
+                <div className="ml-auto shrink-0">{createButton}</div>
+              ) : null}
             </div>
-            <div className="flex items-center gap-2 px-3 pb-2">
-              <div className="min-w-0 flex-1">{searchBox}</div>
-              {actionGroups}
-            </div>
+            {libraryContent === "materials" ? (
+              <div className="flex items-center gap-2 px-3 pb-2">
+                <div className="min-w-0 flex-1">{searchBox}</div>
+                {actionGroups}
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="flex h-14 items-center gap-3 px-3">
             {libraryHeading}
-            <div className="ml-auto flex min-w-0 items-center gap-2">
-              {searchBox}
-              {actionGroups}
-              {createButton}
-            </div>
+            {libraryContent === "materials" ? (
+              <div className="ml-auto flex min-w-0 items-center gap-2">
+                {searchBox}
+                {actionGroups}
+                {createButton}
+              </div>
+            ) : null}
           </div>
         )}
       </header>
@@ -1650,6 +1472,8 @@ export default function CodexLibrary() {
         ) : null}
         {narrow ? (
           <div className="min-w-0 flex-1">{content}</div>
+        ) : libraryContent === "timeline" ? (
+          <div className="min-h-0 min-w-0 flex-1">{content}</div>
         ) : (
           <ResizablePanelGroup
             direction="horizontal"

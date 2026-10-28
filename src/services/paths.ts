@@ -115,6 +115,16 @@ export function codexMentionsFile(): string {
   return joinRel(CODEX_DIR, "mentions.json");
 }
 
+/** 工作区级情绪类型配置。 */
+export function codexEmotionTypesFile(): string {
+  return joinRel(CODEX_DIR, "emotion-types.json");
+}
+
+/** 单部作品的故事时间线数据。 */
+export function workTimelineFile(workId: string): string {
+  return joinRel(WORKS_DIR, workId, "timeline.json");
+}
+
 /**
  * V1 素材库备份目录（V2 迁移前整体复制一份）。
  *
